@@ -120,7 +120,7 @@ body{height:100dvh}
  #dd,#about{position:fixed;z-index:60}
  #ddtip,#volc-tip{z-index:70}
  #dd .ddwrap{margin:0 auto;max-height:100dvh;border-radius:0;padding:14px}
- #dd svg[viewBox]{max-width:100%;height:auto;display:block}
+ #dd svg[viewBox]{max-width:100%;height:auto;display:block;overflow:hidden}
  #dd .ddrow{gap:14px}
  .lbox{max-height:58dvh}
  #zoomhint{display:none}
@@ -2120,21 +2120,29 @@ init();
 <script>
 (function(){
   var MQ = window.matchMedia('(max-width:820px)');
-  var IDS = ['ddindex','ddlong','ddrent','ddblock','ddcurve','ddwalk','ddmix','ddaff',
-             'ddincome','ddpers','ddquint','ddquad','ddlaunch','ddenbloc','ddupg'];
   var MAXK = 2.4, KEEP = 0.9;   // recover 90% of apparent text size, capped at 2.4x
-  var obs = [], pending = null;
+  var pending = null, root = null;
 
   function avail(){
-    // #dd .ddwrap padding is 14px each side on mobile
     return Math.max(240, Math.min(window.innerWidth, document.documentElement.clientWidth) - 32);
   }
 
+  // Charts built in JS often carry width/height but no viewBox, so they cannot
+  // shrink and get clipped. Give every chart under #dd a viewBox from its own
+  // declared size; this is a no-op on desktop where width/height still apply.
+  function ensureViewBox(svg){
+    if(svg.getAttribute('viewBox')) return true;
+    var W = parseFloat(svg.getAttribute('width')), H = parseFloat(svg.getAttribute('height'));
+    if(!isFinite(W) || !isFinite(H) || W <= 0 || H <= 0) return false;
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    return true;
+  }
+
   function factor(svg){
-    var vb = (svg.getAttribute('viewBox') || '').split(/\s+/);
+    var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/);
     var W = parseFloat(vb[2]);
     if(!W) return 1;
-    var scale = Math.min(1, avail() / W);      // max-width:100% only ever shrinks
+    var scale = Math.min(1, avail() / W);   // max-width:100% only ever shrinks
     if(scale >= 1) return 1;
     return Math.max(1, Math.min(MAXK, KEEP / scale));
   }
@@ -2151,49 +2159,43 @@ init();
       }
       var v = parseFloat(base);
       if(!isFinite(v)) continue;
-      n.setAttribute('font-size', (k === 1 ? v : Math.round(v * k * 10) / 10));
+      n.setAttribute('font-size', k === 1 ? v : Math.round(v * k * 10) / 10);
     }
   }
 
   function applyAll(){
+    if(!root) root = document.getElementById('dd');
+    if(!root) return;
     var on = MQ.matches;
-    IDS.forEach(function(id){
-      var svg = document.getElementById(id);
-      if(!svg) return;
-      scaleText(svg, on ? factor(svg) : 1);
-    });
+    var svgs = root.querySelectorAll('svg');
+    for(var i = 0; i < svgs.length; i++){
+      var s = svgs[i];
+      if(!ensureViewBox(s)) continue;
+      scaleText(s, on ? factor(s) : 1);
+    }
   }
 
   function schedule(){
     if(pending) return;
-    pending = setTimeout(function(){ pending = null; applyAll(); }, 120);
-  }
-
-  function watch(){
-    IDS.forEach(function(id){
-      var svg = document.getElementById(id);
-      if(!svg || svg.__ddwatch) return;
-      svg.__ddwatch = true;
-      var o = new MutationObserver(function(muts){
-        // only react to redraws (new nodes), not to our own font-size writes
-        for(var i = 0; i < muts.length; i++){
-          if(muts[i].type === 'childList' && muts[i].addedNodes.length){ schedule(); return; }
-        }
-      });
-      o.observe(svg, {childList:true, subtree:true});
-      obs.push(o);
-    });
+    pending = setTimeout(function(){ pending = null; applyAll(); }, 130);
   }
 
   function start(){
-    watch();
+    root = document.getElementById('dd');
+    if(!root) return;
     applyAll();
-    var dd = document.getElementById('ddbtn');
-    if(dd) dd.addEventListener('click', function(){ setTimeout(applyAll, 60); });
+    // childList only: our own writes are attribute changes, so no feedback loop
+    new MutationObserver(function(muts){
+      for(var i = 0; i < muts.length; i++){
+        if(muts[i].addedNodes && muts[i].addedNodes.length){ schedule(); return; }
+      }
+    }).observe(root, {childList:true, subtree:true});
+    var b = document.getElementById('ddbtn');
+    if(b) b.addEventListener('click', function(){ setTimeout(applyAll, 80); });
     window.addEventListener('resize', schedule);
     window.addEventListener('orientationchange', function(){ setTimeout(applyAll, 300); });
-    if(MQ.addEventListener) MQ.addEventListener('change', function(){ setTimeout(applyAll, 60); });
-    else if(MQ.addListener) MQ.addListener(function(){ setTimeout(applyAll, 60); });
+    if(MQ.addEventListener) MQ.addEventListener('change', function(){ setTimeout(applyAll, 80); });
+    else if(MQ.addListener) MQ.addListener(function(){ setTimeout(applyAll, 80); });
   }
 
   if(document.readyState === 'complete') start();
