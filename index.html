@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>HDB and Condo Resale: MRT Walking Distance and Station-Countdown Mispricing</title>
 <style>
 :root{--bg:#141a20;--map:#10151a;--land:#1d2530;--panel:#1b232b;--bord:#2b3542;--txt:#e6ecf1;--mut:#97a4b0;--acc:#53c0e8;}
@@ -68,6 +69,28 @@ svg:active{cursor:grabbing}
 .vcard ul{margin:6px 0 6px 16px;padding:0}
 .vcard li{margin:3px 0}
 .mlink{color:var(--acc);cursor:pointer;text-decoration:underline;font-size:12px}
+</style>
+<style>
+/* ===== MOBILE OPTIMIZATION ===== */
+#svg{touch-action:none}
+body{height:100dvh}
+#dd .ddwrap{overflow-x:auto}
+@media (max-width:820px){
+ header{padding:8px 10px;gap:8px}
+ header h1{font-size:12.5px;flex-basis:100%;margin-bottom:2px}
+ .tgl button{padding:6px 9px;font-size:11.5px}
+ #guidebtn,#ddbtn,#aboutbtn,#fvc-open-btn,#distbtn{padding:6px 10px;font-size:11.5px}
+ #wrap{flex-direction:column}
+ #side{width:100%;max-height:32dvh;border-right:none;border-bottom:1px solid var(--bord);padding:10px 12px}
+ #mapbox{flex:1;min-height:46dvh}
+ #card{width:min(92vw,340px);right:4vw;top:8px;max-height:68dvh;overflow-y:auto}
+ .lbox{max-height:58dvh}
+ #dd .ddwrap{margin:1.5vh auto;max-height:97dvh;padding:14px}
+ #zoomhint{display:none}
+ #fvc-modal .fvc-card{padding:16px}
+ #fvc-modal .fvc-grid{grid-template-columns:1fr 1fr;gap:9px}
+}
+/* ===== END MOBILE OPTIMIZATION ===== */
 </style>
 </head>
 <body>
@@ -1833,6 +1856,49 @@ init();
 })();
 </script>
 <!-- ===== END AFFORDABILITY TOP-LEVEL TAB ===== -->
+
+
+<!-- ===== MOBILE OPTIMIZATION (touch gestures) ===== -->
+<script>
+(function(){
+  var el=document.getElementById('svg');
+  if(!el) return;
+  var mode=null, sx=0, sy=0, tx0=0, ty0=0, z0=1, d0=1, mx0=0, my0=0;
+  function dist(t){var dx=t[0].clientX-t[1].clientX, dy=t[0].clientY-t[1].clientY; return Math.hypot(dx,dy);}
+  function mid(t,r){return [ (t[0].clientX+t[1].clientX)/2-r.left, (t[0].clientY+t[1].clientY)/2-r.top ];}
+  el.addEventListener('touchstart',function(e){
+    var t=e.touches;
+    if(t.length===1){ mode='pan'; sx=t[0].clientX-tx; sy=t[0].clientY-ty; }
+    else if(t.length===2){
+      mode='pinch';
+      var r=el.getBoundingClientRect(), m=mid(t,r);
+      d0=dist(t)||1; mx0=m[0]; my0=m[1]; tx0=tx; ty0=ty; z0=zoom;
+    }
+  },{passive:true});
+  el.addEventListener('touchmove',function(e){
+    e.preventDefault();
+    var t=e.touches;
+    if(mode==='pan'&&t.length===1){
+      tx=t[0].clientX-sx; ty=t[0].clientY-sy;
+      if(gRoot) gRoot.setAttribute('transform','translate('+tx+','+ty+') scale('+zoom+')');
+    }else if(mode==='pinch'&&t.length===2){
+      var r=el.getBoundingClientRect(), m=mid(t,r);
+      var f=(dist(t)||1)/d0;
+      zoom=z0*f;
+      tx=mx0-(mx0-tx0)*f+(m[0]-mx0);
+      ty=my0-(my0-ty0)*f+(m[1]-my0);
+      if(gRoot) gRoot.setAttribute('transform','translate('+tx+','+ty+') scale('+zoom+')');
+    }
+  },{passive:false});
+  el.addEventListener('touchend',function(e){
+    if(e.touches.length===0){ mode=null; queueRender(); }
+    else if(e.touches.length===1){ mode='pan'; sx=e.touches[0].clientX-tx; sy=e.touches[0].clientY-ty; }
+  });
+  el.addEventListener('touchcancel',function(){ mode=null; queueRender(); });
+  document.addEventListener('gesturestart',function(e){ if(e.target&&el.contains(e.target)) e.preventDefault(); });
+})();
+</script>
+<!-- ===== END MOBILE OPTIMIZATION ===== -->
 
 </body>
 </html>
