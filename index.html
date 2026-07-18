@@ -2163,6 +2163,33 @@ init();
     }
   }
 
+  // Enlarging text can push a long caption past its own chart edge, where the
+  // SVG clips it. Walk it back just enough to fit, never below its design size.
+  function fitText(svg){
+    var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/);
+    var vbW = parseFloat(vb[2]);
+    if(!vbW) return;
+    var nodes = svg.querySelectorAll('[data-fs0]');
+    for(var i = 0; i < nodes.length; i++){
+      var n = nodes[i];
+      if(typeof n.getComputedTextLength !== 'function') continue;
+      var len = 0;
+      try{ len = n.getComputedTextLength(); }catch(e){ continue; }
+      if(!len) continue;
+      var x = parseFloat(n.getAttribute('x')) || 0;
+      var a = n.getAttribute('text-anchor');
+      var left = a === 'middle' ? x - len / 2 : (a === 'end' ? x - len : x);
+      if(left + len <= vbW - 1 && left >= -1) continue;
+      var room = a === 'middle' ? 2 * Math.min(x, vbW - x) : (a === 'end' ? x : vbW - x);
+      if(room <= 2) continue;
+      var cur = parseFloat(n.getAttribute('font-size'));
+      var base = parseFloat(n.getAttribute('data-fs0'));
+      if(!isFinite(cur) || !isFinite(base)) continue;
+      var next = Math.max(base, cur * (room - 2) / len);
+      if(next < cur) n.setAttribute('font-size', Math.round(next * 10) / 10);
+    }
+  }
+
   function applyAll(){
     if(!root) root = document.getElementById('dd');
     if(!root) return;
@@ -2172,6 +2199,7 @@ init();
       var s = svgs[i];
       if(!ensureViewBox(s)) continue;
       scaleText(s, on ? factor(s) : 1);
+      if(on) fitText(s);
     }
   }
 
