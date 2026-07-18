@@ -2191,6 +2191,22 @@ init();
     }
   }
 
+  // A chart that draws outside its own viewBox gets silently clipped by the SVG
+  // root. Grow the box to cover whatever was actually drawn, so nothing is lost.
+  function growToContent(svg){
+    var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+    if(vb.length < 4) return;
+    var bb;
+    try{ bb = svg.getBBox(); }catch(e){ return; }
+    if(!bb || (!bb.width && !bb.height)) return;
+    var x0 = Math.min(vb[0], Math.floor(bb.x - 1));
+    var y0 = Math.min(vb[1], Math.floor(bb.y - 1));
+    var x1 = Math.max(vb[0] + vb[2], Math.ceil(bb.x + bb.width + 1));
+    var y1 = Math.max(vb[1] + vb[3], Math.ceil(bb.y + bb.height + 1));
+    if(x0 === vb[0] && y0 === vb[1] && x1 === vb[0] + vb[2] && y1 === vb[1] + vb[3]) return;
+    svg.setAttribute('viewBox', x0 + ' ' + y0 + ' ' + (x1 - x0) + ' ' + (y1 - y0));
+  }
+
   function applyAll(){
     if(!root) root = document.getElementById('dd');
     if(!root) return;
@@ -2200,7 +2216,7 @@ init();
       var s = svgs[i];
       if(!ensureViewBox(s)) continue;
       scaleText(s, on ? factor(s) : 1);
-      if(on) fitText(s);
+      if(on){ fitText(s); growToContent(s); }
     }
   }
 
