@@ -118,7 +118,8 @@ body{height:100dvh}
  /* --- overlays must clear the sheet --- */
  #card{width:min(94vw,360px);left:auto;right:3vw;top:8px;max-height:52dvh;overflow-y:auto}
  #dd,#about{position:fixed;z-index:60}
- #ddtip,#volc-tip{z-index:70}
+ #ddtip,#volc-tip{z-index:70;max-width:calc(100vw - 16px)}
+ #tip{max-width:min(270px,calc(100vw - 24px))}
  #dd .ddwrap{margin:0 auto;max-height:100dvh;border-radius:0;padding:14px}
  #dd svg[viewBox]{max-width:100%;height:auto;display:block;overflow:hidden}
  #dd .ddrow{gap:14px}
@@ -2231,6 +2232,87 @@ init();
 })();
 </script>
 <!-- ===== END MOBILE DEEP DIVE CHARTS ===== -->
+
+<!-- ===== POPUP EDGE CLAMP ===== -->
+<script>
+(function(){
+  // Every popup on this page is positioned from pointer coords with hard-coded
+  // size guesses and no edge clamp, so on a narrow screen they land off-screen
+  // (ddTipShow flips to clientX-290, which goes negative below ~290px of width).
+  // Rather than patch each call site, watch the popups and pull any that lands
+  // outside its container back into view. Catches every code path, present or future.
+  var IDS = ['ddtip','tip','volc-tip','fvc-tip'];
+  var MQ = window.matchMedia('(max-width:820px)');
+  var M = 8, guard = false;
+
+  function hostBox(el, pos){
+    if(pos === 'fixed') return {l:0, t:0, w:window.innerWidth, h:window.innerHeight};
+    var p = el.offsetParent || document.body;
+    var r = p.getBoundingClientRect();
+    return {l:r.left, t:r.top, w:p.clientWidth || r.width, h:p.clientHeight || r.height};
+  }
+
+  function clamp(el){
+    if(guard || !el) return;
+    var cs = window.getComputedStyle(el);
+    if(cs.display === 'none' || cs.visibility === 'hidden') return;
+    var pos = cs.position;
+    if(pos !== 'fixed' && pos !== 'absolute') return;
+
+    guard = true;
+    try{
+      // never let a popup be wider than the space it has to live in
+      var host = hostBox(el, pos);
+      var cap = Math.max(160, host.w - 2 * M);
+      if(el.getBoundingClientRect().width > cap) el.style.maxWidth = cap + 'px';
+
+      var r = el.getBoundingClientRect();
+      var dx = 0, dy = 0;
+      if(r.right > host.l + host.w - M) dx = (host.l + host.w - M) - r.right;
+      if(r.left + dx < host.l + M)      dx = (host.l + M) - r.left;
+      if(r.bottom > host.t + host.h - M) dy = (host.t + host.h - M) - r.bottom;
+      if(r.top + dy < host.t + M)        dy = (host.t + M) - r.top;
+
+      if(dx || dy){
+        var cl = parseFloat(el.style.left), ct = parseFloat(el.style.top);
+        if(isFinite(cl)) el.style.left = (cl + dx) + 'px';
+        if(isFinite(ct)) el.style.top  = (ct + dy) + 'px';
+      }
+    }catch(e){}
+    guard = false;
+  }
+
+  function watch(el){
+    if(!el || el.__tipclamp) return;
+    el.__tipclamp = true;
+    new MutationObserver(function(){ clamp(el); }).observe(el, {attributes:true, attributeFilter:['style']});
+  }
+
+  function hideAll(){
+    IDS.forEach(function(id){
+      var el = document.getElementById(id);
+      if(el && el.style.display !== 'none') el.style.display = 'none';
+    });
+  }
+
+  function start(){
+    IDS.forEach(function(id){ watch(document.getElementById(id)); });
+    // Touch fires mousemove once but never mouseleave, so a tapped tooltip would
+    // otherwise stay on screen forever. Dismiss it on the next tap outside a chart.
+    document.addEventListener('touchstart', function(e){
+      var t = e.target;
+      if(t && t.closest && (t.closest('svg') || t.closest('#dd svg'))) return;
+      hideAll();
+    }, {passive:true});
+    window.addEventListener('resize', hideAll);
+    window.addEventListener('orientationchange', hideAll);
+  }
+
+  if(document.readyState === 'complete') start();
+  else window.addEventListener('load', start);
+})();
+</script>
+<!-- ===== END POPUP EDGE CLAMP ===== -->
 
 </body>
 </html>
